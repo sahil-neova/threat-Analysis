@@ -3,7 +3,6 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import axios from "axios";
 import { Copy, Download, Mail } from "lucide-react";
-import { toast } from "@/components/ui/sonner";
 import Layout from "@/components/Layout";
 import {
   Dialog,
@@ -13,6 +12,7 @@ import {
   DialogFooter,
   DialogClose,
 } from "@/components/ui/dialog";
+import { useToast } from "@/hooks/use-toast";
 
 export default function MalwareAnalysis() {
   const [sha256, setSha256] = useState("");
@@ -23,6 +23,7 @@ export default function MalwareAnalysis() {
   const [emailDialogOpen, setEmailDialogOpen] = useState(false);
   const [recipientEmail, setRecipientEmail] = useState("");
   const [isEmailSending, setIsEmailSending] = useState(false);
+  const { toast } = useToast();
 
   const handleAnalyze = async () => {
     if (!sha256.trim()) return;
@@ -72,7 +73,7 @@ export default function MalwareAnalysis() {
 
   const handleCopy = (text: string) => {
     navigator.clipboard.writeText(text);
-    toast.success("Copied to clipboard");
+    toast({ title: "Copied", description: "Copied to clipboard." });
   };
 
   const handleDownload = () => {
@@ -91,8 +92,23 @@ export default function MalwareAnalysis() {
     /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
   const handleEmailSend = async () => {
-    if (!isValidEmail(recipientEmail)) {
-      toast.error("Invalid email address");
+    const email = recipientEmail.trim();
+
+    if (!email) {
+      toast({
+        title: "Email Required",
+        description: "Please enter a valid email address.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!isValidEmail(email)) {
+      toast({
+        title: "Invalid Email",
+        description: `${email} is not a valid email address.`,
+        variant: "destructive",
+      });
       return;
     }
 
@@ -101,14 +117,22 @@ export default function MalwareAnalysis() {
 
       const response = await axios.post(
         "http://localhost:8000/email_threat_analysis_report",
-	{ recipient_email:recipientEmail }
+        { recipient_email: email }
       );
 
-      toast.success(response.data.message || "Email sent successfully");
+      toast({
+        title: "Email Sent",
+        description: response.data.message || "The report has been emailed successfully.",
+      });
+
       setEmailDialogOpen(false);
       setRecipientEmail("");
     } catch (error) {
-      toast.error("Failed to send email. Please try again.");
+      toast({
+        title: "Email Failed",
+        description: "Failed to send the email. Please try again.",
+        variant: "destructive",
+      });
     } finally {
       setIsEmailSending(false);
     }
@@ -135,12 +159,11 @@ export default function MalwareAnalysis() {
 
         {result && (
           <div className="space-y-6 mt-6">
-
             {/* Full Report */}
             <div>
               <h3 className="text-lg font-semibold mb-2">Analysis Report:</h3>
               <div className="bg-muted dark:bg-gray-900 p-4 rounded text-sm overflow-auto whitespace-pre-wrap leading-relaxed text-gray-800 dark:text-gray-200">
-       	        {result.fullText.split("\n").map((line: string, idx: number) => (
+                {result.fullText.split("\n").map((line: string, idx: number) => (
                   <div key={idx} className="px-2 py-1">
                     {line}
                   </div>
