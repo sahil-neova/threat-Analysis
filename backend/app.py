@@ -4,6 +4,7 @@ import logging
 from pathlib import Path
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from openai import OpenAI
 from static_analysis.utils import config
@@ -46,6 +47,7 @@ app.add_middleware(
     expose_headers=["Content-Disposition"],
 )
 
+
 # Configure logging
 logging.basicConfig(filename='app.log',
                     level=logging.DEBUG,
@@ -55,6 +57,22 @@ logging.basicConfig(filename='app.log',
 
 # Ensure required directories exist
 Path(config.malware_upload_dir).mkdir(parents=True, exist_ok=True)
+
+
+# CORS settings
+origins = [
+    "http://localhost:3000",
+    "http://localhost:8080",
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+    expose_headers=["Content-Disposition"],
+)
 
 # Pydantic model for request body
 class StaticAnalysisRequest(BaseModel):
@@ -183,6 +201,7 @@ async def upload_malware(request_data: StaticAnalysisRequest):
 
         log_file = config.log_file
         log_path = f"{config.logs_dir}analysis_log_{log_file}"
+        os.makedirs(os.path.dirname(log_path), exist_ok=True)
 
         # Run analysis
         with open(log_path, 'a', encoding='utf-8') as f:
@@ -245,6 +264,7 @@ async def upload_malware(request_data: StaticAnalysisRequest):
             rules = completion.choices[0].message.content
             cleaned_rules = re.sub(r'```(plaintext)?\n?', '', rules).replace('\\n', '\n')
             rules_path = f"{config.suricata_rules_dir}suricata_rule_{log_file}"
+            os.makedirs(os.path.dirname(rules_path), exist_ok=True)
 
             with open(rules_path, "w", encoding="utf-8") as f:
                 f.write(cleaned_rules)

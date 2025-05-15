@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import axios from "axios";
-import { Copy } from "lucide-react";
+import { Copy, Download } from "lucide-react";
 import { toast } from "@/components/ui/sonner";
 import Layout from "@/components/Layout";
 
@@ -11,6 +11,7 @@ export default function MalwareAnalysis() {
   const [result, setResult] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+  const [fileBlob, setFileBlob] = useState<Blob | null>(null);
 
   const handleAnalyze = async () => {
     if (!sha256.trim()) return;
@@ -18,12 +19,37 @@ export default function MalwareAnalysis() {
     setLoading(true);
     setErrorMsg("");
     setResult(null);
+    setFileBlob(null);
 
     try {
-      const response = await axios.post("http://localhost:8000/static_analysis", {
-        sha256,
+      const response = await axios.post(
+        "http://localhost:8000/static_analysis",
+        { sha256 },
+        { responseType: "blob" }
+      );
+
+      const blob = new Blob([response.data], { type: "text/plain" });
+      setFileBlob(blob);
+
+      const text = await blob.text();
+
+      // Extract summary and signatures
+      const summaryMatch = text.match(/1\. Malware Summary:\s*([\s\S]*?)\n2\. Suricata Signatures:/);
+      const summary = summaryMatch ? summaryMatch[1].trim() : "";
+
+      const signatureMatch = text.match(/2\. Suricata Signatures:\s*([\s\S]*)/);
+      const signatureSection = signatureMatch ? signatureMatch[1].trim() : "";
+
+      const signatureLines = signatureSection
+        .split("\n")
+        .map(line => line.trim())
+        .filter(line => line.startsWith("alert"));
+
+      setResult({
+        fullText: text,
+        summary,
+        signatureLines,
       });
-      setResult(response.data);
     } catch (error) {
       console.error("Analysis failed", error);
       setErrorMsg("Analysis failed. Please check the SHA256 and try again.");
@@ -35,6 +61,19 @@ export default function MalwareAnalysis() {
   const handleCopy = (text: string) => {
     navigator.clipboard.writeText(text);
     toast.success("Copied to clipboard");
+  };
+
+  const handleDownload = () => {
+    if (!fileBlob) return;
+
+    const url = window.URL.createObjectURL(fileBlob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", "suricata_rules.txt");
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
   };
 
   return (
@@ -60,36 +99,52 @@ export default function MalwareAnalysis() {
       {/* Result Section */}
       {result && (
         <div className="space-y-6 mt-6">
-          {/* Malware Summary */}
-          <div>
-            <h3 className="text-lg font-semibold mb-2">Malware Summary:</h3>
-            <div className="bg-muted dark:bg-gray-900 p-4 rounded text-sm overflow-auto whitespace-pre-wrap leading-relaxed text-gray-800 dark:text-gray-200">
-              {result.summary}
-            </div>
-          </div>
 
-          {/* Suricata Signatures */}
+          {/* Download Button */}
+          {fileBlob && (
+            <Button
+              onClick={handleDownload}
+              className="flex items-center space-x-2"
+              variant="outline"
+            >
+              <Download className="w-4 h-4 mr-2" />
+              Download Suricata Rules
+            </Button>
+          )}
+
+          {/* Full Report View */}
           <div>
-            <h3 className="text-lg font-semibold mb-2">Suricata Signatures:</h3>
-            <div className="space-y-3">
-              {result.signatures
-                ?.split("\n")
-                .filter((line: string) => line.trim())
-                .map((line: string, idx: number) => (
+            <h3 className="text-lg font-semibold mb-2">Analysis Report:</h3>
+            <div className="bg-muted dark:bg-gray-900 p-4 rounded text-sm overflow-auto whitespace-pre-wrap leading-relaxed text-gray-800 dark:text-gray-200">
+
+              {result.fullText.split("\n").map((line: string, idx: number) => {
+                const isSummaryLine = result.summary.includes(line.trim());
+                const isSignature = line.trim().startsWith("alert");
+
+                return (
                   <div
                     key={idx}
-                    className="relative bg-gray-100 dark:bg-gray-800 p-4 rounded text-sm overflow-auto whitespace-pre-wrap text-gray-700 dark:text-gray-300"
+                    className={`relative px-2 py-1 rounded ${
+                      isSignature
+                        ? "bg-green-100 dark:bg-green-900"
+                        : isSummaryLine
+                        ? "bg-yellow-100 dark:bg-yellow-900"
+                        : ""
+                    }`}
                   >
-                    <button
-                      onClick={() => handleCopy(line.trim())}
-                      className="absolute top-2 right-2 text-gray-500 hover:text-gray-800 dark:hover:text-white"
-                      title="Copy"
-                    >
-                      <Copy className="w-4 h-4" />
-                    </button>
-                    {line.trim()}
+                    {isSignature && (
+                      <button
+                        onClick={() => handleCopy(line.trim())}
+                        className="absolute top-1 right-1 text-gray-500 hover:text-gray-800 dark:hover:text-white"
+                        title="Copy"
+                      >
+                        <Copy className="w-4 h-4" />
+                      </button>
+                    )}
+                    {line}
                   </div>
-                ))}
+                );
+              })}
             </div>
           </div>
         </div>
@@ -98,3 +153,4 @@ export default function MalwareAnalysis() {
     </Layout>
   );
 }
+

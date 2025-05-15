@@ -31,27 +31,31 @@ def allowed_file(filename: str) -> bool:
 
 def download_and_extract_zip(auth_key, sha256_hash, extract_dir, zip_path, download_url="https://mb-api.abuse.ch/api/v1/"):
     try:
-        command = [
-            "wget",
-            "--header", f"Auth-Key: {auth_key}",
-            "--post-data", f"query=get_file&sha256_hash={sha256_hash}",
-            "-O", zip_path,
-            download_url
-        ]
-        result = subprocess.run(command, check=True, capture_output=True, text=True)
-        print("Download STDOUT:", result.stdout)
-        print("Download STDERR:", result.stderr)
+        headers = {
+            "Auth-Key": auth_key
+        }
+        data = {
+            "query": "get_file",
+            "sha256_hash": sha256_hash
+        }
+        os.makedirs(os.path.dirname(zip_path), exist_ok=True)
+        response = requests.post(download_url, headers=headers, data=data)
+        response.raise_for_status()  # Raises HTTPError for bad responses
+
+        with open(zip_path, 'wb') as f:
+            f.write(response.content)
 
         file_names = []
         with pyzipper.AESZipFile(zip_path, mode='r') as zf:
-            zf.setpassword("infected".encode())  # Set the password for decryption
+            zf.setpassword(b"infected")
             zf.extractall(path=extract_dir)
             file_names = zf.namelist()
-        
+
         return file_names
- 
+
     except Exception as e:
         logging.error(f"Error downloading or extracting zip file: {e}")
+        return []
 
 
 def cleanup(file_paths):
