@@ -33,9 +33,11 @@ export default function MalwareAnalysis() {
     setFileBlob(null);
 
     try {
+      const user_id = localStorage.getItem("user_id") || "";
+
       const response = await axios.post(
         "http://localhost:8000/static_analysis",
-        { sha256 },
+        { sha256, user_id },
         { responseType: "blob" }
       );
 

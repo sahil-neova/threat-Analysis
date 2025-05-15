@@ -27,7 +27,7 @@ const ReportsPage = () => {
 
       try {
         const response = await axios.get(
-          "http://localhost:8000/list_compliance_reports",
+          "http://localhost:8000/list_threat_analysis_reports",
           {
             params: { user_id: userId },
           }

@@ -4,7 +4,7 @@ import logging
 import smtplib
 from email.message import EmailMessage
 from pathlib import Path
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -12,6 +12,7 @@ from openai import OpenAI
 from static_analysis.utils import config
 from static_analysis.utils.helpers import allowed_file, download_and_extract_zip, cleanup
 from static_analysis.utils.analyze import analyze_sample
+from s3_utils import S3Utils
 from datetime import datetime, timedelta
 from jose import JWTError, jwt
 from pydantic import BaseModel, EmailStr
@@ -25,6 +26,8 @@ load_dotenv()
 # FastAPI app
 app = FastAPI()
 openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+BUCKET_NAME = "neova-cloudsec-ai2025"
 
 SECRET_KEY = os.getenv("JWT_SECRET_KEY", "supersecretjwtkey")
 ACCESS_TOKEN_EXPIRE_MINUTES = 60
@@ -173,6 +176,7 @@ async def login(login_request: LoginRequest):
 @app.post("/static_analysis")
 async def upload_malware(request_data: StaticAnalysisRequest):
     hash_code = request_data.sha256
+    user_id = request_data.user_id
     if not hash_code:
         logging.error("Empty SHA256 hash provided")
         raise HTTPException(status_code=400, detail="Empty sha256 hash provided")
@@ -276,6 +280,12 @@ async def upload_malware(request_data: StaticAnalysisRequest):
             with open(rules_path, "w", encoding="utf-8") as f:
                 f.write(report_with_hash)
 
+            # --- S3 Upload ---
+            s3 = S3Utils()
+            s3_key = f"threat-analysis-reports/{user_id}/suricata_rule_{log_file}"
+
+            s3.upload_file(rules_path, BUCKET_NAME, s3_key)
+
             return FileResponse(path=rules_path, media_type="text/plain", filename=f"suricata_rule_{log_file}")
 
         except Exception as e:
@@ -292,6 +302,27 @@ async def upload_malware(request_data: StaticAnalysisRequest):
             logging.info("Cleanup completed.")
         except Exception as e:
             logging.error(f"Cleanup failed: {e}")
+
+
+@app.get("/list_threat_analysis_reports")
+async def list_threat_analysis_reports(user_id: str = Query(..., description="MongoDB user ID")):
+    try:
+        s3_prefix = f"threat-analysis-reports/{user_id}/"
+        s3 = S3Utils()
+        file_keys = s3.list_files(BUCKET_NAME, s3_prefix)
+
+        files = []
+        for key in file_keys:
+            view_url = s3.generate_presigned_url(BUCKET_NAME, key, disposition='inline')
+            download_url = s3.generate_presigned_url(BUCKET_NAME, key, disposition='attachment')
+            files.append({"s3_key": key, "view_url": view_url, "download_url": download_url})
+
+        return JSONResponse(content={"files": files})
+
+    except Exception as e:
+        logging.error(f"❌ Error listing files: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to list compliance reports.")
+
 
 @app.post("/email_threat_analysis_report")
 async def email_threat_analysis_report(request: EmailRequest):
