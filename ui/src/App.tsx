@@ -14,7 +14,8 @@ import SupportPage from "./pages/SupportPage";
 import AdminContactPage from "./pages/AdminContactPage";
 import CreateUserPage from "./pages/CreateUserPage";
 import ThreatAnalysisPage from "./pages/ThreatAnalysisPage";
-import Index from "./pages/index";
+import Index from "./pages/Index";
+import ReportsPage from "./pages/ReportsPage";
 
 // Route protection
 import { AdminProtectedRoute } from "./components/AdminProtectedRoute";
@@ -60,6 +61,7 @@ const App = () => (
             />
             <Route path="/threat-analysis" element={<ThreatAnalysisPage />} />
             <Route path="/dashboard" element={<Index />} />
+            <Route path="/reports" element={<ReportsPage/>}/>
           </Route>
 
           {/* Catch-all */}

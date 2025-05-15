@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import axios from "axios";
 import { Copy } from "lucide-react";
 import { toast } from "@/components/ui/sonner";
+import Layout from "@/components/Layout";
 
 export default function MalwareAnalysis() {
   const [sha256, setSha256] = useState("");
@@ -37,6 +38,7 @@ export default function MalwareAnalysis() {
   };
 
   return (
+    <Layout promptHistory={[]}>
     <div className="p-6 max-w-5xl mx-auto">
       <h2 className="text-2xl font-bold mb-6">Malware Analyzer</h2>
 
@@ -93,5 +95,6 @@ export default function MalwareAnalysis() {
         </div>
       )}
     </div>
+    </Layout>
   );
 }

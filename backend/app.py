@@ -9,15 +9,49 @@ from openai import OpenAI
 from static_analysis.utils import config
 from static_analysis.utils.helpers import allowed_file, download_and_extract_zip, cleanup
 from static_analysis.utils.analyze import analyze_sample
+from datetime import datetime, timedelta
+from jose import JWTError, jwt
+from pydantic import BaseModel, EmailStr
+from pymongo import MongoClient
+from passlib.context import CryptContext
+from fastapi.middleware.cors import CORSMiddleware
+from dotenv import load_dotenv
+load_dotenv()
+
+
+# FastAPI app
+app = FastAPI()
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+SECRET_KEY = os.getenv("JWT_SECRET_KEY", "supersecretjwtkey")
+ACCESS_TOKEN_EXPIRE_MINUTES = 60
+ALGORITHM = "HS256"
+MONGO_URI = os.getenv("MONGO_URI")
+client = MongoClient(MONGO_URI)
+db = client["neoThreatAgent"]
+users_collection = db['Users']
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+origins = [
+    "http://localhost:3000",
+    "http://localhost:8080",
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+    expose_headers=["Content-Disposition"],
+)
 
 # Configure logging
 logging.basicConfig(filename='app.log',
                     level=logging.DEBUG,
                     format='%(asctime)s - %(levelname)s - %(message)s')
 
-# FastAPI app
-app = FastAPI()
-client = OpenAI()
+
 
 # Ensure required directories exist
 Path(config.malware_upload_dir).mkdir(parents=True, exist_ok=True)
@@ -25,6 +59,93 @@ Path(config.malware_upload_dir).mkdir(parents=True, exist_ok=True)
 # Pydantic model for request body
 class StaticAnalysisRequest(BaseModel):
     sha256: str
+    
+class SignupRequest(BaseModel):
+    email: str
+    password: str
+    role: str
+
+class LoginRequest(BaseModel):
+    email: EmailStr
+    password: str
+    
+class ResetPasswordRequest(BaseModel):
+    email: EmailStr
+    current_password: str
+    new_password: str
+    
+def create_access_token(data: dict, expires_delta: timedelta = None):
+    to_encode = data.copy()
+    expire = datetime.utcnow() + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
+    to_encode.update({"exp": expire})
+    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
+@app.post("/create_user")
+async def signup(user: SignupRequest):
+    existing_user = users_collection.find_one({"email": user.email})
+    if existing_user:
+        raise HTTPException(status_code=400, detail="User already exists with this email.")
+    if user.role not in ["admin", "user"]:
+        raise HTTPException(status_code=400, detail="Invalid role.")
+    hashed_password = pwd_context.hash(user.password)
+    users_collection.insert_one({"email": user.email, "password": hashed_password,"role": user.role})
+    return {"message": "User created successfully!"}
+
+@app.post("/reset-password")
+async def reset_password(request: ResetPasswordRequest):
+    try:
+        user = users_collection.find_one({"email": request.email})
+        if not user:
+            logging.error(f"Password reset failed for {request.email}: User not found")
+            raise HTTPException(status_code=404, detail="User not found")
+
+        if not pwd_context.verify(request.current_password, user['password']):
+            logging.error(f"Password reset failed for {request.email}: Invalid current password")
+            raise HTTPException(status_code=400, detail="Invalid current password")
+
+        if request.current_password == request.new_password:
+            logging.error(f"Password reset failed for {request.email}: New password same as current")
+            raise HTTPException(status_code=400, detail="New password cannot be the same as current password")
+
+        password_regex = r"^(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*])[A-Za-z\d!@#$%^&*]{8,}$"
+        import re
+        if not re.match(password_regex, request.new_password):
+            logging.error(f"Password reset failed for {request.email}: New password does not meet requirements")
+            raise HTTPException(
+                status_code=400,
+                detail="New password must be at least 8 characters long and include at least one uppercase letter, one number, and one special character (!@#$%^&*)"
+            )
+
+        hashed_new_password = pwd_context.hash(request.new_password)
+        users_collection.update_one(
+            {"email": request.email},
+            {"$set": {"password": hashed_new_password}}
+        )
+        logging.info(f"Password reset successful for {request.email}")
+        return {"message": "Password reset successfully"}
+    except Exception as e:
+        logging.error(f"Error in reset_password: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+    
+@app.post("/admin_login")
+async def login(login_request: LoginRequest):
+    user = users_collection.find_one({"email": login_request.email})
+    if not user or not pwd_context.verify(login_request.password, user['password']):
+        raise HTTPException(status_code=400, detail="Invalid email or password.")
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Access denied. Admins only.")
+    token_data = {"sub": user["email"]}
+    access_token = create_access_token(token_data)
+    return {"access_token": access_token, "token_type": "bearer", "user_id": str(user["_id"]),"role":"admin"}
+
+@app.post("/login")
+async def login(login_request: LoginRequest):
+    user = users_collection.find_one({"email": login_request.email})
+    if not user or not pwd_context.verify(login_request.password, user['password']):
+        raise HTTPException(status_code=400, detail="Invalid email or password.")
+    token_data = {"sub": user["email"]}
+    access_token = create_access_token(token_data)
+    return {"access_token": access_token, "token_type": "bearer", "user_id": str(user["_id"]),"role":user["role"]}
 
 @app.post("/static_analysis")
 async def upload_malware(request_data: StaticAnalysisRequest):
@@ -144,3 +265,8 @@ async def upload_malware(request_data: StaticAnalysisRequest):
             logging.info("Cleanup completed.")
         except Exception as e:
             logging.error(f"Cleanup failed: {e}")
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run(app, host="0.0.0.0", port=8000)
