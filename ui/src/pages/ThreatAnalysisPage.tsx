@@ -96,16 +96,10 @@ export default function MalwareAnalysis() {
 
     try {
       setIsEmailSending(true);
-      const formData = new FormData();
-      formData.append("email", recipientEmail);
-      formData.append("sha256", sha256);
-      if (fileBlob) {
-        formData.append("file", fileBlob, "suricata_rules.txt");
-      }
 
       const response = await axios.post(
         "http://localhost:8000/email_threat_analysis_report",
-        formData
+	{ recipient_email:recipientEmail }
       );
 
       toast.success(response.data.message || "Email sent successfully");
