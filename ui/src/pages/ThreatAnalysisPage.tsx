@@ -162,34 +162,11 @@ export default function MalwareAnalysis() {
             <div>
               <h3 className="text-lg font-semibold mb-2">Analysis Report:</h3>
               <div className="bg-muted dark:bg-gray-900 p-4 rounded text-sm overflow-auto whitespace-pre-wrap leading-relaxed text-gray-800 dark:text-gray-200">
-                {result.fullText.split("\n").map((line: string, idx: number) => {
-                  const isSummaryLine = result.summary.includes(line.trim());
-                  const isSignature = line.trim().startsWith("alert");
-
-                  return (
-                    <div
-                      key={idx}
-                      className={`relative px-2 py-1 rounded ${
-                        isSignature
-                          ? "bg-green-100 dark:bg-green-900"
-                          : isSummaryLine
-                          ? "bg-yellow-100 dark:bg-yellow-900"
-                          : ""
-                      }`}
-                    >
-                      {isSignature && (
-                        <button
-                          onClick={() => handleCopy(line.trim())}
-                          className="absolute top-1 right-1 text-gray-500 hover:text-gray-800 dark:hover:text-white"
-                          title="Copy"
-                        >
-                          <Copy className="w-4 h-4" />
-                        </button>
-                      )}
-                      {line}
-                    </div>
-                  );
-                })}
+       	        {result.fullText.split("\n").map((line: string, idx: number) => (
+                  <div key={idx} className="px-2 py-1">
+                    {line}
+                  </div>
+                ))}
               </div>
             </div>
           </div>

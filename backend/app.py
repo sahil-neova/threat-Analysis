@@ -24,7 +24,7 @@ load_dotenv()
 
 # FastAPI app
 app = FastAPI()
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 SECRET_KEY = os.getenv("JWT_SECRET_KEY", "supersecretjwtkey")
 ACCESS_TOKEN_EXPIRE_MINUTES = 60
@@ -224,7 +224,7 @@ async def upload_malware(request_data: StaticAnalysisRequest):
             with open(log_path, 'r') as file:
                 content = file.read()
 
-            completion = client.chat.completions.create(
+            completion = openai_client.chat.completions.create(
                 model="gpt-4o",
                 messages=[
                     {
