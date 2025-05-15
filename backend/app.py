@@ -268,11 +268,13 @@ async def upload_malware(request_data: StaticAnalysisRequest):
 
             rules = completion.choices[0].message.content
             cleaned_rules = re.sub(r'```(plaintext)?\n?', '', rules).replace('\\n', '\n')
+
+            report_with_hash = f"SHA256: {hash_code}\n\n{cleaned_rules}"
             rules_path = f"{config.suricata_rules_dir}suricata_rule_{log_file}"
             os.makedirs(os.path.dirname(rules_path), exist_ok=True)
 
             with open(rules_path, "w", encoding="utf-8") as f:
-                f.write(cleaned_rules)
+                f.write(report_with_hash)
 
             return FileResponse(path=rules_path, media_type="text/plain", filename=f"suricata_rule_{log_file}")
 
