@@ -82,6 +82,7 @@ app.add_middleware(
 # Pydantic model for request body
 class StaticAnalysisRequest(BaseModel):
     sha256: str
+    user_id: str
     
 class EmailRequest(BaseModel):
     recipient_email: str  # comma-separated if multiple

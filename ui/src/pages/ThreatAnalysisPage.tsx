@@ -136,24 +136,6 @@ export default function MalwareAnalysis() {
         {result && (
           <div className="space-y-6 mt-6">
 
-            {/* Download and Email Buttons */}
-            <div className="flex space-x-4">
-              {fileBlob && (
-                <Button onClick={handleDownload} variant="outline" className="flex items-center">
-                  <Download className="w-4 h-4 mr-2" />
-                  Download Suricata Rules
-                </Button>
-              )}
-              <Button
-                onClick={() => setEmailDialogOpen(true)}
-                variant="outline"
-                className="flex items-center"
-              >
-                <Mail className="w-4 h-4 mr-2" />
-                Email Report
-              </Button>
-            </div>
-
             {/* Full Report */}
             <div>
               <h3 className="text-lg font-semibold mb-2">Analysis Report:</h3>
@@ -164,6 +146,26 @@ export default function MalwareAnalysis() {
                   </div>
                 ))}
               </div>
+            </div>
+
+            {/* Download and Email Buttons */}
+            <div className="flex space-x-4 mt-4">
+              {fileBlob && (
+                <Button
+                  onClick={handleDownload}
+                  className="bg-blue-600 hover:bg-blue-700 text-white shadow-md flex items-center"
+                >
+                  <Download className="w-4 h-4 mr-2" />
+                  Download Suricata Rules
+                </Button>
+              )}
+              <Button
+                onClick={() => setEmailDialogOpen(true)}
+                className="bg-blue-600 hover:bg-blue-700 text-white shadow-md flex items-center"
+              >
+                <Mail className="w-4 h-4 mr-2" />
+                Email Report
+              </Button>
             </div>
           </div>
         )}
