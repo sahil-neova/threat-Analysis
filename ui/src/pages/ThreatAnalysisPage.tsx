@@ -2,9 +2,17 @@ import React, { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import axios from "axios";
-import { Copy, Download } from "lucide-react";
+import { Copy, Download, Mail } from "lucide-react";
 import { toast } from "@/components/ui/sonner";
 import Layout from "@/components/Layout";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogClose,
+} from "@/components/ui/dialog";
 
 export default function MalwareAnalysis() {
   const [sha256, setSha256] = useState("");
@@ -12,6 +20,9 @@ export default function MalwareAnalysis() {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [fileBlob, setFileBlob] = useState<Blob | null>(null);
+  const [emailDialogOpen, setEmailDialogOpen] = useState(false);
+  const [recipientEmail, setRecipientEmail] = useState("");
+  const [isEmailSending, setIsEmailSending] = useState(false);
 
   const handleAnalyze = async () => {
     if (!sha256.trim()) return;
@@ -33,7 +44,6 @@ export default function MalwareAnalysis() {
 
       const text = await blob.text();
 
-      // Extract summary and signatures
       const summaryMatch = text.match(/1\. Malware Summary:\s*([\s\S]*?)\n2\. Suricata Signatures:/);
       const summary = summaryMatch ? summaryMatch[1].trim() : "";
 
@@ -65,7 +75,6 @@ export default function MalwareAnalysis() {
 
   const handleDownload = () => {
     if (!fileBlob) return;
-
     const url = window.URL.createObjectURL(fileBlob);
     const link = document.createElement("a");
     link.href = url;
@@ -76,81 +85,141 @@ export default function MalwareAnalysis() {
     window.URL.revokeObjectURL(url);
   };
 
+  const isValidEmail = (email: string) =>
+    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+
+  const handleEmailSend = async () => {
+    if (!isValidEmail(recipientEmail)) {
+      toast.error("Invalid email address");
+      return;
+    }
+
+    try {
+      setIsEmailSending(true);
+      const formData = new FormData();
+      formData.append("email", recipientEmail);
+      formData.append("sha256", sha256);
+      if (fileBlob) {
+        formData.append("file", fileBlob, "suricata_rules.txt");
+      }
+
+      const response = await axios.post(
+        "http://localhost:8000/email_threat_analysis_report",
+        formData
+      );
+
+      toast.success(response.data.message || "Email sent successfully");
+      setEmailDialogOpen(false);
+      setRecipientEmail("");
+    } catch (error) {
+      toast.error("Failed to send email. Please try again.");
+    } finally {
+      setIsEmailSending(false);
+    }
+  };
+
   return (
     <Layout promptHistory={[]}>
-    <div className="p-6 max-w-5xl mx-auto">
-      <h2 className="text-2xl font-bold mb-6">Malware Analyzer</h2>
+      <div className="p-6 max-w-5xl mx-auto">
+        <h2 className="text-2xl font-bold mb-6">Malware Analyzer</h2>
 
-      {/* Input Section */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-4 mb-4 space-y-2 sm:space-y-0">
-        <Input
-          value={sha256}
-          onChange={(e) => setSha256(e.target.value)}
-          placeholder="Enter SHA256"
-          className="flex-1"
-        />
-        <Button onClick={handleAnalyze} disabled={loading || !sha256.trim()}>
-          {loading ? "Analyzing..." : "Analyze Malware"}
-        </Button>
-      </div>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-4 mb-4 space-y-2 sm:space-y-0">
+          <Input
+            value={sha256}
+            onChange={(e) => setSha256(e.target.value)}
+            placeholder="Enter SHA256"
+            className="flex-1"
+          />
+          <Button onClick={handleAnalyze} disabled={loading || !sha256.trim()}>
+            {loading ? "Analyzing..." : "Analyze Malware"}
+          </Button>
+        </div>
 
-      {errorMsg && <p className="text-red-500 mb-4">{errorMsg}</p>}
+        {errorMsg && <p className="text-red-500 mb-4">{errorMsg}</p>}
 
-      {/* Result Section */}
-      {result && (
-        <div className="space-y-6 mt-6">
+        {result && (
+          <div className="space-y-6 mt-6">
 
-          {/* Download Button */}
-          {fileBlob && (
-            <Button
-              onClick={handleDownload}
-              className="flex items-center space-x-2"
-              variant="outline"
-            >
-              <Download className="w-4 h-4 mr-2" />
-              Download Suricata Rules
-            </Button>
-          )}
+            {/* Download and Email Buttons */}
+            <div className="flex space-x-4">
+              {fileBlob && (
+                <Button onClick={handleDownload} variant="outline" className="flex items-center">
+                  <Download className="w-4 h-4 mr-2" />
+                  Download Suricata Rules
+                </Button>
+              )}
+              <Button
+                onClick={() => setEmailDialogOpen(true)}
+                variant="outline"
+                className="flex items-center"
+              >
+                <Mail className="w-4 h-4 mr-2" />
+                Email Report
+              </Button>
+            </div>
 
-          {/* Full Report View */}
-          <div>
-            <h3 className="text-lg font-semibold mb-2">Analysis Report:</h3>
-            <div className="bg-muted dark:bg-gray-900 p-4 rounded text-sm overflow-auto whitespace-pre-wrap leading-relaxed text-gray-800 dark:text-gray-200">
+            {/* Full Report */}
+            <div>
+              <h3 className="text-lg font-semibold mb-2">Analysis Report:</h3>
+              <div className="bg-muted dark:bg-gray-900 p-4 rounded text-sm overflow-auto whitespace-pre-wrap leading-relaxed text-gray-800 dark:text-gray-200">
+                {result.fullText.split("\n").map((line: string, idx: number) => {
+                  const isSummaryLine = result.summary.includes(line.trim());
+                  const isSignature = line.trim().startsWith("alert");
 
-              {result.fullText.split("\n").map((line: string, idx: number) => {
-                const isSummaryLine = result.summary.includes(line.trim());
-                const isSignature = line.trim().startsWith("alert");
-
-                return (
-                  <div
-                    key={idx}
-                    className={`relative px-2 py-1 rounded ${
-                      isSignature
-                        ? "bg-green-100 dark:bg-green-900"
-                        : isSummaryLine
-                        ? "bg-yellow-100 dark:bg-yellow-900"
-                        : ""
-                    }`}
-                  >
-                    {isSignature && (
-                      <button
-                        onClick={() => handleCopy(line.trim())}
-                        className="absolute top-1 right-1 text-gray-500 hover:text-gray-800 dark:hover:text-white"
-                        title="Copy"
-                      >
-                        <Copy className="w-4 h-4" />
-                      </button>
-                    )}
-                    {line}
-                  </div>
-                );
-              })}
+                  return (
+                    <div
+                      key={idx}
+                      className={`relative px-2 py-1 rounded ${
+                        isSignature
+                          ? "bg-green-100 dark:bg-green-900"
+                          : isSummaryLine
+                          ? "bg-yellow-100 dark:bg-yellow-900"
+                          : ""
+                      }`}
+                    >
+                      {isSignature && (
+                        <button
+                          onClick={() => handleCopy(line.trim())}
+                          className="absolute top-1 right-1 text-gray-500 hover:text-gray-800 dark:hover:text-white"
+                          title="Copy"
+                        >
+                          <Copy className="w-4 h-4" />
+                        </button>
+                      )}
+                      {line}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </div>
-        </div>
-      )}
-    </div>
+        )}
+
+        {/* Email Dialog */}
+        <Dialog open={emailDialogOpen} onOpenChange={setEmailDialogOpen}>
+          <DialogContent className="bg-white dark:bg-gray-900 rounded-xl">
+            <DialogHeader>
+              <DialogTitle>Send Report via Email</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <Input
+                type="email"
+                placeholder="Enter recipient email"
+                value={recipientEmail}
+                onChange={(e) => setRecipientEmail(e.target.value)}
+              />
+            </div>
+            <DialogFooter className="mt-4 flex justify-end space-x-2">
+              <DialogClose asChild>
+                <Button variant="ghost">Cancel</Button>
+              </DialogClose>
+              <Button onClick={handleEmailSend} disabled={isEmailSending}>
+                {isEmailSending ? "Sending..." : "Send"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
     </Layout>
   );
 }
-

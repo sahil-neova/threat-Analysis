@@ -1,6 +1,8 @@
 import os
 import re
 import logging
+import smtplib
+from email.message import EmailMessage
 from pathlib import Path
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
@@ -78,6 +80,9 @@ app.add_middleware(
 class StaticAnalysisRequest(BaseModel):
     sha256: str
     
+class EmailRequest(BaseModel):
+    recipient_email: str  # comma-separated if multiple
+
 class SignupRequest(BaseModel):
     email: str
     password: str
@@ -285,6 +290,49 @@ async def upload_malware(request_data: StaticAnalysisRequest):
             logging.info("Cleanup completed.")
         except Exception as e:
             logging.error(f"Cleanup failed: {e}")
+
+@app.post("/email_threat_analysis_report")
+async def email_threat_analysis_report(request: EmailRequest):
+    try:
+        recipient_emails = [email.strip() for email in request.recipient_email.split(",")]
+        rules_files = sorted(
+            Path(config.suricata_rules_dir).glob("suricata_rule_*"),
+            key=os.path.getmtime,
+            reverse=True
+        )
+
+        if not rules_files:
+            logging.error("No Suricata rules file found for emailing.")
+            raise HTTPException(status_code=404, detail="Suricata rules file not found.")
+
+        rules_file_path = str(rules_files[0])
+        rules_filename = os.path.basename(rules_file_path)
+
+        msg = EmailMessage()
+        msg["Subject"] = f"neoThreatAgent Suricata Rules – {rules_filename}"
+        msg["From"] = os.getenv("SENDER_EMAIL")
+        msg["To"] = ", ".join(recipient_emails)
+        msg.set_content("Please find attached the generated Suricata rules from neoThreatAgent.")
+
+        with open(rules_file_path, "rb") as f:
+            msg.add_attachment(
+                f.read(),
+                maintype="text",
+                subtype="plain",
+                filename=rules_filename
+            )
+
+        with smtplib.SMTP(os.getenv("SMTP_SERVER"), int(os.getenv("SMTP_PORT"))) as server:
+            server.starttls()
+            server.login(os.getenv("SMTP_USERNAME"), os.getenv("SMTP_PASSWORD"))
+            server.send_message(msg)
+
+        logging.info(f"Suricata rules email sent to {', '.join(recipient_emails)}")
+        return {"message": f"Suricata rules email sent to {', '.join(recipient_emails)} successfully."}
+    except Exception as e:
+        logging.error(f"Failed to send Suricata rules email: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 if __name__ == "__main__":
     import uvicorn
