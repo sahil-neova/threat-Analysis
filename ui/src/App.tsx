@@ -16,6 +16,8 @@ import CreateUserPage from "./pages/CreateUserPage";
 import ThreatAnalysisPage from "./pages/ThreatAnalysisPage";
 import Index from "./pages/Index";
 import ReportsPage from "./pages/ReportsPage";
+import SetOpenAIKeyPage from "./pages/SetOpenAIKeyPage";
+
 
 // Route protection
 import { AdminProtectedRoute } from "./components/AdminProtectedRoute";
@@ -48,6 +50,7 @@ const App = () => (
           <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/contact_admin" element={<AdminContactPage />} />
           <Route path="/support" element={<SupportPage />} />
+          <Route path="/set-openai-key" element={<SetOpenAIKeyPage />} />
 
           {/* Protected Routes */}
           <Route element={<ProtectedRoute />}>
