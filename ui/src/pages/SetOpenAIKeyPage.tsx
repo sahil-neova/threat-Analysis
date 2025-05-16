@@ -1,6 +1,6 @@
 import { Helmet } from "react-helmet";
 import { useState } from "react";
-import { useNavigate } from "react-router-dom"; // Added for navigation
+import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { useToast } from "@/components/ui/use-toast";
 import { Button } from "@/components/ui/button";
@@ -14,29 +14,24 @@ import {
   CardFooter,
 } from "@/components/ui/card";
 import Layout from "@/components/Layout";
-import { useProgress } from "@/context/ProgressContext";
 
 const SetOpenAIKeyPage = () => {
   const [apiKey, setApiKey] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
-  const { setApiKeySet } = useProgress();
-  const navigate = useNavigate(); // Initialize navigate
+  const navigate = useNavigate();
 
-  // Validate the API key format
   const validateApiKey = (key: string) => {
-    // Check if the key starts with 'sk-' and has a reasonable length (OpenAI keys are long)
     if (!key.startsWith("sk-")) {
       return "Invalid API key format. It should start with 'sk-'.";
     }
     if (key.length < 30) {
       return "API key is too short. Please enter a valid key.";
     }
-    return null; // No error
+    return null;
   };
 
   const handleSubmit = async () => {
-    // Validate the API key before submitting
     const validationError = validateApiKey(apiKey.trim());
     if (validationError) {
       toast({
@@ -68,7 +63,6 @@ const SetOpenAIKeyPage = () => {
           description: "OpenAI API key saved successfully.",
         });
         setApiKey("");
-        setApiKeySet(true);
         navigate("/dashboard"); // Redirect after successful submission
       }
     } catch (error: any) {
