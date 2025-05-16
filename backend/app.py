@@ -298,9 +298,15 @@ async def upload_malware(request_data: StaticAnalysisRequest):
 
             return FileResponse(path=rules_path, media_type="text/plain", filename=f"suricata_rule_{log_file}")
 
+        except HTTPException as http_exec:
+            raise http_exec
+
         except Exception as e:
             logging.error(f"OpenAI rule generation failed: {e}")
             raise HTTPException(status_code=500, detail="Failed to generate Suricata rules")
+
+    except HTTPException as http_exec:
+        raise http_exec
 
     except Exception as e:
         logging.error(f"Processing error: {e}")

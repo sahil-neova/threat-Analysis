@@ -66,10 +66,28 @@ export default function MalwareAnalysis() {
     } catch (error: any) {
       console.error("Analysis failed", error);
 
-      if (axios.isAxiosError(error)) {
-        const message =
-          error.response?.data?.detail || "Analysis failed. Please try again.";
-        setErrorMsg(message);
+      if (axios.isAxiosError(error) && error.response) {
+        const contentType = error.response.headers["content-type"];
+    
+        if (contentType && contentType.includes("application/json")) {
+          // Try to read the error blob as JSON
+          const reader = new FileReader();
+          reader.onload = () => {
+            try {
+              const json = JSON.parse(reader.result as string);
+              setErrorMsg(json.detail || "Analysis failed. Please try again.");
+            } catch {
+              setErrorMsg("Failed to parse error message.");
+            }
+          };
+          reader.onerror = () => {
+            setErrorMsg("Failed to read error message.");
+          };
+          reader.readAsText(error.response.data);
+        } else {
+          // Fallback for non-JSON blobs
+          setErrorMsg("Analysis failed. Please try again.");
+        }
       } else {
         setErrorMsg("An unexpected error occurred. Please try again.");
       }
