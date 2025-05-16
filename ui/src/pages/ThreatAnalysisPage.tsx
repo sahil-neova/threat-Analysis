@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import axios from "axios";
-import { Copy, Download, Mail } from "lucide-react";
+import { Download, Mail } from "lucide-react";
 import Layout from "@/components/Layout";
 import {
   Dialog,
@@ -16,10 +16,9 @@ import { useToast } from "@/hooks/use-toast";
 
 export default function MalwareAnalysis() {
   const [sha256, setSha256] = useState("");
-  const [result, setResult] = useState<any>(null);
+  const [fileBlob, setFileBlob] = useState<Blob | null>(null);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
-  const [fileBlob, setFileBlob] = useState<Blob | null>(null);
   const [emailDialogOpen, setEmailDialogOpen] = useState(false);
   const [recipientEmail, setRecipientEmail] = useState("");
   const [isEmailSending, setIsEmailSending] = useState(false);
@@ -30,7 +29,6 @@ export default function MalwareAnalysis() {
 
     setLoading(true);
     setErrorMsg("");
-    setResult(null);
     setFileBlob(null);
 
     try {
@@ -42,33 +40,17 @@ export default function MalwareAnalysis() {
         { responseType: "blob" }
       );
 
-      const blob = new Blob([response.data], { type: "text/plain" });
+      // Now expect a PDF blob
+      const blob = new Blob([response.data], { type: "application/pdf" });
       setFileBlob(blob);
-
-      const text = await blob.text();
-
-      const summaryMatch = text.match(/1\. Malware Summary:\s*([\s\S]*?)\n2\. Suricata Signatures:/);
-      const summary = summaryMatch ? summaryMatch[1].trim() : "";
-
-      const signatureMatch = text.match(/2\. Suricata Signatures:\s*([\s\S]*)/);
-      const signatureSection = signatureMatch ? signatureMatch[1].trim() : "";
-
-      const signatureLines = signatureSection
-        .split("\n")
-        .map(line => line.trim())
-        .filter(line => line.startsWith("alert"));
-
-      setResult({
-        fullText: text,
-        summary,
-        signatureLines,
-      });
+      
+      // We no longer parse PDF as text, so no summary/signature extraction
     } catch (error: any) {
       console.error("Analysis failed", error);
 
       if (axios.isAxiosError(error) && error.response) {
         const contentType = error.response.headers["content-type"];
-    
+
         if (contentType && contentType.includes("application/json")) {
           // Try to read the error blob as JSON
           const reader = new FileReader();
@@ -96,17 +78,12 @@ export default function MalwareAnalysis() {
     setLoading(false);
   };
 
-  const handleCopy = (text: string) => {
-    navigator.clipboard.writeText(text);
-    toast({ title: "Copied", description: "Copied to clipboard." });
-  };
-
   const handleDownload = () => {
     if (!fileBlob) return;
     const url = window.URL.createObjectURL(fileBlob);
     const link = document.createElement("a");
     link.href = url;
-    link.setAttribute("download", "suricata_rules.txt");
+    link.setAttribute("download", "suricata_rules.pdf"); // changed to .pdf
     document.body.appendChild(link);
     link.click();
     link.remove();
@@ -182,31 +159,33 @@ export default function MalwareAnalysis() {
 
         {errorMsg && <p className="text-red-500 mb-4">{errorMsg}</p>}
 
-        {result && (
+        {fileBlob && (
           <div className="space-y-6 mt-6">
-            {/* Full Report */}
+            {/* Embedded PDF preview */}
             <div>
-              <h3 className="text-lg font-semibold mb-2">Analysis Report:</h3>
-              <div className="bg-muted dark:bg-gray-900 p-4 rounded text-sm overflow-auto whitespace-pre-wrap leading-relaxed text-gray-800 dark:text-gray-200">
-                {result.fullText.split("\n").map((line: string, idx: number) => (
-                  <div key={idx} className="px-2 py-1">
-                    {line}
-                  </div>
-                ))}
-              </div>
+              <h3 className="text-lg font-semibold mb-2">Analysis Report (PDF):</h3>
+              <object
+                data={window.URL.createObjectURL(fileBlob)}
+                type="application/pdf"
+                width="100%"
+                height="600px"
+                aria-label="PDF Report"
+              >
+                <p>
+                  PDF preview is not supported by your browser. You can download the file instead.
+                </p>
+              </object>
             </div>
 
             {/* Download and Email Buttons */}
             <div className="flex space-x-4 mt-4">
-              {fileBlob && (
-                <Button
-                  onClick={handleDownload}
-                  className="bg-blue-600 hover:bg-blue-700 text-white shadow-md flex items-center"
-                >
-                  <Download className="w-4 h-4 mr-2" />
-                  Download Suricata Rules
-                </Button>
-              )}
+              <Button
+                onClick={handleDownload}
+                className="bg-blue-600 hover:bg-blue-700 text-white shadow-md flex items-center"
+              >
+                <Download className="w-4 h-4 mr-2" />
+                Download Report
+              </Button>
               <Button
                 onClick={() => setEmailDialogOpen(true)}
                 className="bg-blue-600 hover:bg-blue-700 text-white shadow-md flex items-center"

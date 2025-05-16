@@ -403,7 +403,7 @@ async def email_threat_analysis_report(request: EmailRequest):
     try:
         recipient_emails = [email.strip() for email in request.recipient_email.split(",")]
         rules_files = sorted(
-            Path(config.suricata_rules_dir).glob("suricata_rule_*"),
+            Path(config.suricata_rules_dir).glob("suricata_rule_*.pdf"),
             key=os.path.getmtime,
             reverse=True
         )
@@ -424,8 +424,8 @@ async def email_threat_analysis_report(request: EmailRequest):
         with open(rules_file_path, "rb") as f:
             msg.add_attachment(
                 f.read(),
-                maintype="text",
-                subtype="plain",
+                maintype="application",
+                subtype="pdf",
                 filename=rules_filename
             )
 
