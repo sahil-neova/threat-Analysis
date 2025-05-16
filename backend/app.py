@@ -9,6 +9,7 @@ import traceback
 from fastapi import FastAPI, HTTPException, Form, Query, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fpdf import FPDF
 from pydantic import BaseModel
 from openai import OpenAI
 from static_analysis.utils import config
@@ -108,6 +109,51 @@ def create_access_token(data: dict, expires_delta: timedelta = None):
     expire = datetime.utcnow() + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
+
+def save_output_to_pdf(summary, signatures, output_path="malware_analysis.pdf"):
+    logo_path = "neova_solutions_logo.jpeg"
+    disclaimer = "Disclaimer: This report is for internal use only. Unauthorized distribution is prohibited."
+
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_auto_page_break(auto=True, margin=20)
+
+    # Header: Logo (top right)
+    if os.path.exists(logo_path):
+        pdf.image(logo_path, x=160, y=10, w=30)
+
+    # Headline (below logo, left-aligned)
+    pdf.set_xy(10, 35)  # Adjust Y to be below logo height
+    pdf.set_font("Arial", 'B', 16)
+    pdf.cell(0, 10, "Malware Analysis Report", ln=True, align="L")
+    pdf.ln(5)
+
+    # Section 1: Malware Summary
+    pdf.set_font("Arial", 'B', 14)
+    pdf.cell(0, 10, "1. Malware Summary:", ln=True)
+    pdf.set_font("Arial", '', 12)
+    pdf.multi_cell(0, 10, summary)
+    pdf.ln(5)
+
+    # Section 2: Suricata Signatures
+    pdf.set_font("Arial", 'B', 14)
+    pdf.cell(0, 10, "2. Suricata Signatures:", ln=True)
+    pdf.set_font("Courier", '', 11)
+    for rule in signatures:
+        pdf.multi_cell(0, 8, f"- {rule}")
+        pdf.ln(1)
+
+    # Footer disclaimer
+    pdf.set_y(-25)
+    pdf.set_font("Arial", 'I', 8)
+    pdf.set_text_color(100)
+    pdf.multi_cell(0, 10, disclaimer, align="C")
+
+    # Output PDF
+    pdf.output(output_path)
+    print(f"PDF successfully saved as: {output_path}")
+
 
 @app.post("/create_user")
 async def signup(user: SignupRequest):
@@ -283,12 +329,18 @@ async def upload_malware(request_data: StaticAnalysisRequest):
             rules = completion.choices[0].message.content
             cleaned_rules = re.sub(r'```(plaintext)?\n?', '', rules).replace('\\n', '\n')
 
-            report_with_hash = f"SHA256: {hash_code}\n\n{cleaned_rules}"
-            rules_path = f"{config.suricata_rules_dir}suricata_rule_{log_file}"
+            # Parse summary and signatures from the OpenAI output
+            parts = cleaned_rules.strip().split("2. Suricata Signatures:")
+            summary = parts[0].replace("1. Malware Summary:", "").strip()
+            summary = f"SHA256: {hash_code}\n\n" + summary
+            signatures = [line.strip("- ").strip() for line in parts[1].strip().split("\n") if line.strip().startswith("-")]
+
+            # Generate PDF file path
+            rules_path = f"{config.suricata_rules_dir}suricata_rule_{log_file}.pdf"
             os.makedirs(os.path.dirname(rules_path), exist_ok=True)
 
-            with open(rules_path, "w", encoding="utf-8") as f:
-                f.write(report_with_hash)
+            # Create PDF report
+            save_output_to_pdf(summary, signatures, output_path=rules_path)
 
             # --- S3 Upload ---
             s3 = S3Utils()
