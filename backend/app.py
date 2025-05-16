@@ -328,6 +328,7 @@ async def upload_malware(request_data: StaticAnalysisRequest):
 
             rules = completion.choices[0].message.content
             cleaned_rules = re.sub(r'```(plaintext)?\n?', '', rules).replace('\\n', '\n')
+            report_with_hash = f"SHA256: {hash_code}\n\n{cleaned_rules}"
 
             # Parse summary and signatures from the OpenAI output
             parts = cleaned_rules.strip().split("2. Suricata Signatures:")
@@ -336,17 +337,22 @@ async def upload_malware(request_data: StaticAnalysisRequest):
             signatures = [line.strip("- ").strip() for line in parts[1].strip().split("\n") if line.strip().startswith("-")]
 
             # Generate PDF file path
-            rules_path = f"{config.suricata_rules_dir}suricata_rule_{log_file}.pdf"
+            rules_pdf_path = f"{config.suricata_rules_dir}suricata_rule_{log_file}.pdf"
+            rules_path = f"{config.suricata_rules_dir}suricata_rule_{log_file}"
+            os.makedirs(os.path.dirname(rules_pdf_path), exist_ok=True)
             os.makedirs(os.path.dirname(rules_path), exist_ok=True)
 
+            with open(rules_path, "w", encoding="utf-8") as f:
+                f.write(report_with_hash)
+
             # Create PDF report
-            save_output_to_pdf(summary, signatures, output_path=rules_path)
+            save_output_to_pdf(summary, signatures, output_path=rules_pdf_path)
 
             # --- S3 Upload ---
             s3 = S3Utils()
             s3_key = f"threat-analysis-reports/{user_id}/suricata_rule_{log_file}"
 
-            s3.upload_file(rules_path, BUCKET_NAME, s3_key)
+            s3.upload_file(rules_pdf_path, BUCKET_NAME, s3_key)
 
             return FileResponse(path=rules_path, media_type="text/plain", filename=f"suricata_rule_{log_file}")
 
