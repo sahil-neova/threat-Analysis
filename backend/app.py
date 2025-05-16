@@ -27,7 +27,6 @@ load_dotenv()
 
 # FastAPI app
 app = FastAPI()
-openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 BUCKET_NAME = "neova-cloudsec-ai2025"
 
@@ -232,6 +231,7 @@ async def upload_malware(request_data: StaticAnalysisRequest):
             with open(log_path, 'r') as file:
                 content = file.read()
 
+            openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
             completion = openai_client.chat.completions.create(
                 model="gpt-4o",
                 messages=[

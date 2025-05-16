@@ -8,6 +8,7 @@ import {
   ChevronsLeft,
   ChevronsRight,
   CirclePlus,
+  Key,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -49,6 +50,7 @@ const Sidebar: React.FC<SidebarProps> = ({ promptHistory }) => {
 
   const navigation = [
     { name: "Home", href: "/dashboard", icon: Home },
+    { name: "Set OpenAI API Key", href: "/set-openai-key", icon: Key },
     { name: "Report", href: "/reports", icon: FileText },
     { name: "Support", href: "/support", icon: LifeBuoy },
     ...(role === "admin"
