@@ -63,9 +63,16 @@ export default function MalwareAnalysis() {
         summary,
         signatureLines,
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error("Analysis failed", error);
-      setErrorMsg("Analysis failed. Please check the SHA256 and try again.");
+
+      if (axios.isAxiosError(error)) {
+        const message =
+          error.response?.data?.detail || "Analysis failed. Please try again.";
+        setErrorMsg(message);
+      } else {
+        setErrorMsg("An unexpected error occurred. Please try again.");
+      }
     }
 
     setLoading(false);

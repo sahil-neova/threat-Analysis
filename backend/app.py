@@ -231,7 +231,13 @@ async def upload_malware(request_data: StaticAnalysisRequest):
             with open(log_path, 'r') as file:
                 content = file.read()
 
-            openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+            api_key = os.getenv("OPENAI_API_KEY")
+            if not api_key:
+                logging.error("OpenAI API key is not set")
+                raise HTTPException(status_code=400, detail="OpenAI API key is not set. Please set the key before using this feature.")
+
+            openai_client = OpenAI(api_key=api_key)
+
             completion = openai_client.chat.completions.create(
                 model="gpt-4o",
                 messages=[
