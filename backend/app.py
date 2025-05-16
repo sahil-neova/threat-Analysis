@@ -4,7 +4,9 @@ import logging
 import smtplib
 from email.message import EmailMessage
 from pathlib import Path
-from fastapi import FastAPI, HTTPException, Query, Request
+import time
+import traceback
+from fastapi import FastAPI, HTTPException, Form, Query, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -37,6 +39,7 @@ client = MongoClient(MONGO_URI)
 db = client["neoThreatAgent"]
 users_collection = db['Users']
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+ticket_counter = 0
 
 origins = [
     "http://localhost:3000",
@@ -322,7 +325,7 @@ async def list_threat_analysis_reports(user_id: str = Query(..., description="Mo
 
     except Exception as e:
         logging.error(f"❌ Error listing files: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to list compliance reports.")
+        raise HTTPException(status_code=500, detail="Failed to list threat analysis reports.")
 
 
 @app.post("/email_threat_analysis_report")
@@ -366,6 +369,124 @@ async def email_threat_analysis_report(request: EmailRequest):
     except Exception as e:
         logging.error(f"Failed to send Suricata rules email: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/support_email")
+async def support_email(
+    user_email: str = Form(...),
+    subject: str = Form(...),
+    message_body: str = Form(...),
+):
+    try:
+        smtp_username = os.getenv("SMTP_USERNAME")
+        smtp_password = os.getenv("SMTP_PASSWORD")
+        smtp_server = os.getenv("SMTP_SERVER")
+        smtp_port = int(os.getenv("SMTP_PORT"))
+        cc_email = os.getenv("CC_EMAIL")
+
+        if not all([smtp_username, smtp_password, smtp_server, smtp_port]):
+            raise ValueError("Missing SMTP configuration in environment variables.")
+
+        global ticket_counter
+        ticket_counter += 1
+        timestamp = int(time.time())
+        ticket_id = f"neoThreatAgent_SUPPORT_{ticket_counter}_{timestamp}"
+
+        msg = EmailMessage()
+        msg["Subject"] = f"[{ticket_id}] {subject}"
+        msg["From"] = smtp_username
+        msg["To"] = smtp_username
+        msg["Reply-To"] = user_email
+
+        # Only set Cc if provided
+        recipients = [smtp_username]
+        if cc_email:
+            msg["Cc"] = cc_email
+            recipients += [email.strip() for email in cc_email.split(",")]
+
+        msg.set_content(
+            f"Support Ticket ID: {ticket_id}\n\nFrom: {user_email}\n\nQuery:\n{message_body}"
+        )
+
+        # Use TLS if port is 587, SSL if 465
+        if smtp_port == 587:
+            with smtplib.SMTP(smtp_server, smtp_port) as smtp:
+                smtp.starttls()
+                smtp.login(smtp_username, smtp_password)
+                smtp.send_message(msg, to_addrs=recipients)
+        else:
+            with smtplib.SMTP_SSL(smtp_server, smtp_port) as smtp:
+                smtp.login(smtp_username, smtp_password)
+                smtp.send_message(msg, to_addrs=recipients)
+
+        return {
+            "message": "Support email sent successfully. Our team will get back to you soon.",
+            "ticket_id": ticket_id
+        }
+
+    except Exception as e:
+        logging.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Failed to send email: {str(e)}")
+    
+
+@app.post("/ask_admin")
+async def ask_admin(
+        user_email: str = Form(...),
+        subject: str = Form(...),
+        inquiry_body: str = Form(...)
+):
+    global inquiry_counter
+    try:
+        inquiry_counter += 1
+        timestamp = int(time.time())
+        inquiry_id = f"neoThreatAgent_INQ_{inquiry_counter}_{timestamp}"
+
+        msg = EmailMessage()
+        msg["Subject"] = f"[{inquiry_id}] {subject}"
+        msg["From"] = os.getenv("SMTP_USERNAME")
+        msg["To"] = os.getenv("SMTP_USERNAME")
+        msg["Reply-To"] = user_email
+        msg.set_content(
+            f"Inquiry ID: {inquiry_id}\n\nFrom: {user_email}\n\nMessage:\n{inquiry_body}"
+        )
+
+        with smtplib.SMTP(os.getenv("SMTP_SERVER"), int(os.getenv("SMTP_PORT"))) as smtp:
+            smtp.starttls()
+            smtp.login(os.getenv("SMTP_USERNAME"), os.getenv("SMTP_PASSWORD"))
+            smtp.send_message(msg)
+
+        return {
+            "message": "Inquiry sent successfully. Our team will respond shortly.",
+            "inquiry_id": inquiry_id
+        }
+
+    except Exception as e:
+        logging.error(f"Failed to send inquiry email: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to send inquiry email: {str(e)}")
+
+@app.post("/set_openapi_key")
+def set_openai_api_key(payload: dict):
+    api_key = payload.get("api_key")
+    if not api_key:
+        raise HTTPException(status_code=400, detail="API key is required")
+
+    env_file = ".env"
+    lines = []
+
+    if os.path.exists(env_file):
+        with open(env_file, "r") as f:
+            lines = f.readlines()
+        lines = [line for line in lines if not line.strip().startswith("OPENAI_API_KEY=")]
+
+    lines.append(f"OPENAI_API_KEY={api_key}\n")
+
+    with open(env_file, "w") as f:
+        f.writelines(lines)
+
+    # ✅ Also update the running environment
+    os.environ["OPENAI_API_KEY"] = api_key
+
+    return {"message": "API key set successfully"}
 
 
 if __name__ == "__main__":

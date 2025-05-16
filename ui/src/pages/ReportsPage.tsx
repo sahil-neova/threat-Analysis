@@ -66,7 +66,7 @@ const ReportsPage = () => {
     <Layout promptHistory={[]}>
       <div className="max-w-7xl mx-auto p-6">
         <h1 className="text-3xl font-bold text-gray-800 dark:text-white mb-6">
-          Compliance Reports
+          Threat Analysis Reports
         </h1>
 
         {loading ? (
@@ -129,7 +129,7 @@ const ReportsPage = () => {
             <iframe
               src={selectedReport.view_url}
               className="w-full h-[500px] rounded border"
-              title="Compliance Report"
+              title="Threat Analysis Report"
             />
           </div>
         </div>

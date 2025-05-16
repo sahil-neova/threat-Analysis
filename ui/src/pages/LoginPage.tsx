@@ -65,7 +65,7 @@ const LoginPage = () => {
             <span className="font-semibold text-blue-600 dark:text-blue-400">
               AI-Powered
             </span>{" "}
-            Cloud Compliance Solution
+            Cloud Threat Analysis Solution
           </p>
         </div>
         <p className="text-slate-700 text-xs sm:text-sm text-center mt-4 font-extrabold">
