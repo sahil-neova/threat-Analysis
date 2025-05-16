@@ -337,12 +337,14 @@ async def upload_malware(request_data: StaticAnalysisRequest):
             signatures = [line.strip("- ").strip() for line in parts[1].strip().split("\n") if line.strip().startswith("-")]
 
             # Generate PDF file path
+            log_file_path = Path(log_file)
+            log_file = log_file_path.stem
             rules_pdf_path = f"{config.suricata_rules_dir}suricata_rule_{log_file}.pdf"
-            rules_path = f"{config.suricata_rules_dir}suricata_rule_{log_file}"
+            rules_text_path = f"{config.suricata_rules_dir}suricata_rule_{log_file}.txt"
             os.makedirs(os.path.dirname(rules_pdf_path), exist_ok=True)
-            os.makedirs(os.path.dirname(rules_path), exist_ok=True)
+            os.makedirs(os.path.dirname(rules_text_path), exist_ok=True)
 
-            with open(rules_path, "w", encoding="utf-8") as f:
+            with open(rules_text_path, "w", encoding="utf-8") as f:
                 f.write(report_with_hash)
 
             # Create PDF report
@@ -350,11 +352,11 @@ async def upload_malware(request_data: StaticAnalysisRequest):
 
             # --- S3 Upload ---
             s3 = S3Utils()
-            s3_key = f"threat-analysis-reports/{user_id}/suricata_rule_{log_file}"
+            s3_key = f"threat-analysis-reports/{user_id}/suricata_rule_{log_file}.pdf"
 
             s3.upload_file(rules_pdf_path, BUCKET_NAME, s3_key)
 
-            return FileResponse(path=rules_path, media_type="text/plain", filename=f"suricata_rule_{log_file}")
+            return FileResponse(path=rules_pdf_path, media_type="application/pdf", filename=f"suricata_rule_{log_file}.pdf")
 
         except HTTPException as http_exec:
             raise http_exec
