@@ -334,7 +334,14 @@ async def upload_malware(request_data: StaticAnalysisRequest):
             parts = cleaned_rules.strip().split("2. Suricata Signatures:")
             summary = parts[0].replace("1. Malware Summary:", "").strip()
             summary = f"SHA256: {hash_code}\n\n" + summary
-            signatures = [line.strip("- ").strip() for line in parts[1].strip().split("\n") if line.strip().startswith("-")]
+            if len(parts) > 1:
+                signatures = [
+                    line.strip("- ").strip()
+                    for line in parts[1].strip().split("\n")
+                    if line.strip().startswith("-")
+                ]
+            else:
+                signatures = []
 
             # Generate PDF file path
             log_file_path = Path(log_file)
