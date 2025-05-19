@@ -111,7 +111,8 @@ def create_access_token(data: dict, expires_delta: timedelta = None):
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 
-def save_output_to_pdf(summary, signatures, output_path="malware_analysis.pdf"):
+
+def save_output_to_pdf(hash_code, malware_type, summary, signatures, output_path="malware_analysis.pdf"):
     logo_path = "neova_solutions_logo.jpeg"
     disclaimer = "Disclaimer: This report is for internal use only. Unauthorized distribution is prohibited."
 
@@ -123,22 +124,36 @@ def save_output_to_pdf(summary, signatures, output_path="malware_analysis.pdf"):
     if os.path.exists(logo_path):
         pdf.image(logo_path, x=160, y=10, w=30)
 
-    # Headline (below logo, left-aligned)
-    pdf.set_xy(10, 35)  # Adjust Y to be below logo height
+    # Headline
+    pdf.set_xy(10, 35)
     pdf.set_font("Arial", 'B', 16)
-    pdf.cell(0, 10, "Malware Analysis Report", ln=True, align="L")
+    pdf.cell(0, 10, "Malware Analysis Report", ln=True)
     pdf.ln(5)
 
-    # Section 1: Malware Summary
+    # Section 1: SHA256 Hash
     pdf.set_font("Arial", 'B', 14)
-    pdf.cell(0, 10, "1. Malware Summary:", ln=True)
+    pdf.cell(0, 10, "1. Malware SHA256 Hash:", ln=True)
+    pdf.set_font("Arial", '', 12)
+    pdf.multi_cell(0, 10, hash_code)
+    pdf.ln(5)
+
+    # Section 2: Malware Type
+    pdf.set_font("Arial", 'B', 14)
+    pdf.cell(0, 10, "2. Malware Type:", ln=True)
+    pdf.set_font("Arial", '', 12)
+    pdf.multi_cell(0, 10, malware_type)
+    pdf.ln(5)
+
+    # Section 3: Malware Summary
+    pdf.set_font("Arial", 'B', 14)
+    pdf.cell(0, 10, "3. Malware Summary:", ln=True)
     pdf.set_font("Arial", '', 12)
     pdf.multi_cell(0, 10, summary)
     pdf.ln(5)
 
-    # Section 2: Suricata Signatures
+    # Section 4: Suricata Signatures
     pdf.set_font("Arial", 'B', 14)
-    pdf.cell(0, 10, "2. Suricata Signatures:", ln=True)
+    pdf.cell(0, 10, "4. Suricata Signatures:", ln=True)
     pdf.set_font("Courier", '', 11)
     for rule in signatures:
         pdf.multi_cell(0, 8, f"- {rule}")
@@ -150,7 +165,7 @@ def save_output_to_pdf(summary, signatures, output_path="malware_analysis.pdf"):
     pdf.set_text_color(100)
     pdf.multi_cell(0, 10, disclaimer, align="C")
 
-    # Output PDF
+    # Save PDF
     pdf.output(output_path)
     print(f"PDF successfully saved as: {output_path}")
 
@@ -303,59 +318,81 @@ async def upload_malware(request_data: StaticAnalysisRequest):
                                             **Suricata Signature Syntax**:  
                                             `alert <protocol> <src_ip> <src_port> -> <dst_ip> <dst_port> (msg:'<message>'; <optional rule options>; sid:<unique_id>; rev:<revision_number>;)`
 
-                                            **Output Format:**
+                            **Output Format:**
 
-                                            1. Malware Summary**:
-                                            - Provide a **brief summary** of the identified malware or suspicious behavior.
-                                            - For each identified malicious activity, generate Suricata IDS/IPS rules following the signature syntax below. **Do not include explanations or descriptions—just the rules**.
-                                            - Explain on what basis we are going to create the suricata rules.
+                            1. Malware SHA256 Hash:
+                            <Extracted SHA256 hash from the content like SHA256: 1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef>
 
-                                            2. Suricata Signatures**:
-                                            alert <protocol> <src_ip> <src_port> -> <dst_ip> <dst_port> (msg:'<message>'; <optional rule options>; sid:<unique_id>; rev:<revision_number>;);
-                                            
-                                            **Example:**
+                            2. Malware Type:
+                            <short label of the malware type like "Trojan", "Ransomware", etc.>
 
-                                            1. Malware Summary:
-                                                Explain the malicious activity briefly
+                            3. Malware Summary:
+                            <brief explanation>
 
-                                            2. Suricata Signatures:
-                                            - alert file any any -> any any (msg:'Potential malicious macro in document'; content:'macro'; sid:1000001; rev:1;)
-                                            - alert file any any -> any any (msg:'VBA script execution detected'; content:'VBA'; sid:1000002; rev:1;)
-                                            """
+                            4. Suricata Signatures:
+                            - alert ...
+                            - alert ...
+                        """
                     }
                 ]
             )
 
-            rules = completion.choices[0].message.content
-            cleaned_rules = re.sub(r'```(plaintext)?\n?', '', rules).replace('\\n', '\n')
-            report_with_hash = f"SHA256: {hash_code}\n\n{cleaned_rules}"
+            # Extract raw content from the OpenAI response
+            raw_output = completion.choices[0].message.content
+            print(f"OpenAI response: {raw_output}")
 
-            # Parse summary and signatures from the OpenAI output
-            parts = cleaned_rules.strip().split("2. Suricata Signatures:")
-            summary = parts[0].replace("1. Malware Summary:", "").strip()
-            summary = f"SHA256: {hash_code}\n\n" + summary
-            if len(parts) > 1:
-                signatures = [
-                    line.strip("- ").strip()
-                    for line in parts[1].strip().split("\n")
-                    if line.strip().startswith("-")
-                ]
-            else:
-                signatures = []
+            # Clean Markdown formatting
+            cleaned_output = re.sub(r'```(plaintext)?\n?', '', raw_output).replace('\\n', '\n').strip()
 
-            # Generate PDF file path
+            # Extract SHA256 hash
+            hash_match = re.search(r'(SHA256:|SHA-256:?)\s*([a-fA-F0-9]{64})', cleaned_output)
+            hash_code = hash_match.group(2) if hash_match else "N/A"
+
+            # Split into summary and signature sections
+            sections = cleaned_output.split("4. Suricata Signatures:")
+            summary_part = sections[0].strip()
+            signatures_part = sections[1].strip() if len(sections) > 1 else ""
+
+            # Extract malware type
+            malware_type_match = re.search(r'2\. Malware Type:\s*(.*)', summary_part)
+            malware_type = malware_type_match.group(1).strip() if malware_type_match else "Unknown"
+
+            # Extract malware summary
+            summary_match = re.search(r'3\. Malware Summary:\s*(.*)', summary_part, re.DOTALL)
+            summary_text = summary_match.group(1).strip() if summary_match else "N/A"
+
+            # Extract individual Suricata rules
+            signatures = [
+                line.strip("- ").strip()
+                for line in signatures_part.split("\n")
+                if line.strip().startswith("-")
+            ]
+
+            # Generate file paths
             log_file_path = Path(log_file)
             log_file = log_file_path.stem
-            rules_pdf_path = f"{config.suricata_rules_dir}suricata_rule_{log_file}.pdf"
-            rules_text_path = f"{config.suricata_rules_dir}suricata_rule_{log_file}.txt"
+            rules_pdf_path = f"{config.suricata_rules_dir}/suricata_rule_{log_file}.pdf"
+            rules_text_path = f"{config.suricata_rules_dir}/suricata_rule_{log_file}.txt"
+
+            # Ensure output directories exist
             os.makedirs(os.path.dirname(rules_pdf_path), exist_ok=True)
             os.makedirs(os.path.dirname(rules_text_path), exist_ok=True)
 
+            # Prepare combined text report (SHA256 + full content)
+            report_with_hash = f"SHA256: {hash_code}\n\n{cleaned_output}"
+
+            # Save text report
             with open(rules_text_path, "w", encoding="utf-8") as f:
                 f.write(report_with_hash)
 
-            # Create PDF report
-            save_output_to_pdf(summary, signatures, output_path=rules_pdf_path)
+            # Save PDF report
+            save_output_to_pdf(
+                hash_code=hash_code,
+                malware_type=malware_type,
+                summary=summary_text,
+                signatures=signatures,
+                output_path=rules_pdf_path
+            )
 
             # --- S3 Upload ---
             s3 = S3Utils()
