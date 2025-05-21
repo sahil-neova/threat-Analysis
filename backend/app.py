@@ -241,6 +241,12 @@ async def login(login_request: LoginRequest):
 async def upload_malware(request_data: StaticAnalysisRequest):
     hash_code = request_data.sha256
     user_id = request_data.user_id
+
+    # --- Cleanup previous files ---
+    rules_dir = config.suricata_rules_dir
+    logs_dir = os.path.dirname(config.log_file)
+    cleanup([rules_dir, logs_dir])
+
     if not hash_code:
         logging.error("Empty SHA256 hash provided")
         raise HTTPException(status_code=400, detail="Empty sha256 hash provided")
@@ -305,18 +311,18 @@ async def upload_malware(request_data: StaticAnalysisRequest):
                     {
                         "role": "user",
                         "content": f"""                             
-                                            Analyze the provided content for any patterns or behaviors that may indicate malicious activity. Focus on identifying relevant network indicators, attack vectors, or suspicious behaviors. Based on this analysis, generate a concise summary of the potential malware and all corresponding Suricata IDS/IPS rules. 
+                            Analyze the provided content for any patterns or behaviors that may indicate malicious activity. Focus on identifying relevant network indicators, attack vectors, or suspicious behaviors. Based on this analysis, generate a concise summary of the potential malware and all corresponding Suricata IDS/IPS rules. 
 
-                                            **Content:**
-                                            {content}
+                            **Content:**
+                            {content}
 
-                                            **Instructions:**
-                                            - Provide a **brief summary** of the identified malware or suspicious behavior.
-                                            - For each identified malicious activity, generate Suricata IDS/IPS rules following the signature syntax below. **Do not include explanations or descriptions—just the rules**.
-                                            - Explain on what basis we are going to create the suricata rules.
-                                            
-                                            **Suricata Signature Syntax**:  
-                                            `alert <protocol> <src_ip> <src_port> -> <dst_ip> <dst_port> (msg:'<message>'; <optional rule options>; sid:<unique_id>; rev:<revision_number>;)`
+                            **Instructions:**
+                            - Provide a **brief summary** of the identified malware or suspicious behavior.
+                            - For each identified malicious activity, generate Suricata IDS/IPS rules following the signature syntax below. **Do not include explanations or descriptions—just the rules**.
+                            - Explain on what basis we are going to create the suricata rules.
+
+                            **Suricata Signature Syntax**:  
+                            `alert <protocol> <src_ip> <src_port> -> <dst_ip> <dst_port> (msg:'<message>'; <optional rule options>; sid:<unique_id>; rev:<revision_number>;)`
 
                             **Output Format:**
 
@@ -337,7 +343,7 @@ async def upload_malware(request_data: StaticAnalysisRequest):
                 ]
             )
 
-            # Extract raw content from the OpenAI response
+            # Extract raw content from OpenAI response
             raw_output = completion.choices[0].message.content
             print(f"OpenAI response: {raw_output}")
 
@@ -370,18 +376,15 @@ async def upload_malware(request_data: StaticAnalysisRequest):
 
             # Generate file paths
             log_file_path = Path(log_file)
-            log_file = log_file_path.stem
-            rules_pdf_path = f"{config.suricata_rules_dir}/suricata_rule_{log_file}.pdf"
-            rules_text_path = f"{config.suricata_rules_dir}/suricata_rule_{log_file}.txt"
+            log_file_name = log_file_path.stem
+            rules_pdf_path = f"{config.suricata_rules_dir}/suricata_rule_{log_file_name}.pdf"
+            rules_text_path = f"{config.suricata_rules_dir}/suricata_rule_{log_file_name}.txt"
 
-            # Ensure output directories exist
             os.makedirs(os.path.dirname(rules_pdf_path), exist_ok=True)
             os.makedirs(os.path.dirname(rules_text_path), exist_ok=True)
 
-            # Prepare combined text report (SHA256 + full content)
-            report_with_hash = f"SHA256: {hash_code}\n\n{cleaned_output}"
-
             # Save text report
+            report_with_hash = f"SHA256: {hash_code}\n\n{cleaned_output}"
             with open(rules_text_path, "w", encoding="utf-8") as f:
                 f.write(report_with_hash)
 
@@ -396,11 +399,10 @@ async def upload_malware(request_data: StaticAnalysisRequest):
 
             # --- S3 Upload ---
             s3 = S3Utils()
-            s3_key = f"threat-analysis-reports/{user_id}/suricata_rule_{log_file}.pdf"
-
+            s3_key = f"threat-analysis-reports/{user_id}/suricata_rule_{log_file_name}.pdf"
             s3.upload_file(rules_pdf_path, BUCKET_NAME, s3_key)
 
-            return FileResponse(path=rules_pdf_path, media_type="application/pdf", filename=f"suricata_rule_{log_file}.pdf")
+            return FileResponse(path=rules_pdf_path, media_type="application/pdf", filename=f"suricata_rule_{log_file_name}.pdf")
 
         except HTTPException as http_exec:
             raise http_exec
@@ -415,13 +417,7 @@ async def upload_malware(request_data: StaticAnalysisRequest):
     except Exception as e:
         logging.error(f"Processing error: {e}")
         raise HTTPException(status_code=500, detail="Internal Server Error")
-    
-    finally:
-        try:
-            cleanup([zip_file])
-            logging.info("Cleanup completed.")
-        except Exception as e:
-            logging.error(f"Cleanup failed: {e}")
+
 
 
 @app.get("/list_threat_analysis_reports")

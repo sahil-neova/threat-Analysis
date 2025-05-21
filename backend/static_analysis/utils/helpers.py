@@ -58,15 +58,18 @@ def download_and_extract_zip(auth_key, sha256_hash, extract_dir, zip_path, downl
         return []
 
 
-def cleanup(file_paths):
-    try:
-        # Check if the file exists before trying to delete it
-        for each in file_paths:
-            if os.path.exists(each):
-                os.remove(each)
-                logging.info(f"File '{each}' deleted successfully.")
-            else:
-                logging.info(f"File '{each}' does not exist.")
-    except Exception as e:
-        logging.error(f"Error occurred while deleting the file: {e}")
-    
+def cleanup(paths: list):
+    for path in paths:
+        try:
+            if os.path.isdir(path):
+                for filename in os.listdir(path):
+                    file_path = os.path.join(path, filename)
+                    if os.path.isfile(file_path):
+                        os.remove(file_path)
+                        logging.info(f"Deleted file: {file_path}")
+            elif os.path.isfile(path):
+                os.remove(path)
+                logging.info(f"Deleted file: {path}")
+        except Exception as e:
+            logging.error(f"Error cleaning up {path}: {e}")
+
