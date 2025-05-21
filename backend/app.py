@@ -244,7 +244,7 @@ async def upload_malware(request_data: StaticAnalysisRequest):
 
     # --- Cleanup previous files ---
     rules_dir = config.suricata_rules_dir
-    logs_dir = config.log_file
+    logs_dir = config.logs_dir
     malware_dir = config.malware_dir
     cleanup([rules_dir, logs_dir,malware_dir])
 
