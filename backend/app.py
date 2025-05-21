@@ -244,8 +244,9 @@ async def upload_malware(request_data: StaticAnalysisRequest):
 
     # --- Cleanup previous files ---
     rules_dir = config.suricata_rules_dir
-    logs_dir = os.path.dirname(config.log_file)
-    cleanup([rules_dir, logs_dir])
+    logs_dir = config.log_file
+    malware_dir = config.malware_dir
+    cleanup([rules_dir, logs_dir,malware_dir])
 
     if not hash_code:
         logging.error("Empty SHA256 hash provided")
